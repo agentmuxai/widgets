@@ -1,0 +1,57 @@
+# Checks every widget on a pull request; on main, builds the catalog, signs
+# its index with the catalog key and publishes it with GitHub Pages
+# (https://agentmuxai.github.io/widgets/index.json), where AgentMux reads it.
+name: catalog
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check every widget
+        run: node scripts/build.mjs --out dist
+
+  publish:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build and sign the catalog
+        env:
+          CATALOG_SIGNING_SEED: ${{ secrets.CATALOG_SIGNING_SEED }}
+        run: |
+          test -n "$CATALOG_SIGNING_SEED" || { echo "::error::the CATALOG_SIGNING_SEED secret isn't set"; exit 1; }
+          node scripts/build.mjs --out dist
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deploy
+        uses: actions/deploy-pages@v4
