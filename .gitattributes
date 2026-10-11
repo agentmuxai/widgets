@@ -1,0 +1,2 @@
+# A widget is signed over its exact bytes: never convert its line endings.
+widgets/** -text
